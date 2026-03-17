@@ -1,5 +1,13 @@
 # llms-txt
 
+<p>
+  <img src="https://img.shields.io/npm/v/@silupanda/llms-txt?color=blue&label=npm" alt="npm version" />
+  <img src="https://img.shields.io/npm/dt/@silupanda/llms-txt?color=brightgreen&label=downloads" alt="npm downloads" />
+  <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen" alt="node version" />
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="license" />
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs welcome" />
+</p>
+
 **Make your website discoverable by AI agents in minutes.**
 
 Every AI agent — ChatGPT, Claude, Perplexity, Copilot — needs to understand what your site offers. Instead of letting them blindly crawl, guess, or hallucinate, `llms-txt` auto-generates a structured [`llms.txt`](https://llmstxt.org/) manifest that tells agents exactly what's on your site, organized and ready to consume.
