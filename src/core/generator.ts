@@ -23,9 +23,10 @@ export function generateLlmsTxt(config: LlmsTxtConfig, pages: PageInfo[]): strin
     }
     lines.push('');
     for (const page of section.pages) {
-      const fullUrl = resolveUrl(siteUrl, page.path);
-      const desc = page.description ? `: ${page.description}` : '';
-      lines.push(`- [${page.title}](${fullUrl})${desc}`);
+      const fullUrl = escapeMarkdownLinkUrl(resolveUrl(siteUrl, page.path));
+      const title = escapeMarkdownLinkTitle(page.title);
+      const desc = page.description ? `: ${sanitizeInlineText(page.description)}` : '';
+      lines.push(`- [${title}](${fullUrl})${desc}`);
     }
     lines.push('');
   }
@@ -37,6 +38,29 @@ export function generateLlmsTxt(config: LlmsTxtConfig, pages: PageInfo[]): strin
       lines.push(content);
       lines.push('');
     }
+  }
+
+  return lines.join('\n').trimEnd() + '\n';
+}
+
+export function generateLlmsSmallTxt(config: LlmsTxtConfig, pages: PageInfo[]): string {
+  const siteUrl = stripTrailingSlash(config.site.url);
+  const filtered = applyFilter(config, pages);
+  const sections = organizeSections(config, filtered);
+  const lines: string[] = [];
+
+  lines.push(`# ${config.site.name}`);
+  lines.push('');
+
+  for (const section of sections) {
+    lines.push(`## ${section.name}`);
+    lines.push('');
+    for (const page of section.pages) {
+      const fullUrl = escapeMarkdownLinkUrl(resolveUrl(siteUrl, page.path));
+      const title = escapeMarkdownLinkTitle(page.title);
+      lines.push(`- [${title}](${fullUrl})`);
+    }
+    lines.push('');
   }
 
   return lines.join('\n').trimEnd() + '\n';
@@ -69,7 +93,7 @@ export function generateLlmsFullTxt(config: LlmsTxtConfig, pages: PageInfo[]): s
       const page = section.pages[i];
       const fullUrl = resolveUrl(siteUrl, page.path);
 
-      lines.push(`### ${page.title}`);
+      lines.push(`### ${sanitizeInlineText(page.title)}`);
       lines.push(`URL: ${fullUrl}`);
       lines.push('');
       if (page.content) {
@@ -171,4 +195,24 @@ function resolveUrl(siteUrl: string, path: string): string {
 
 function stripTrailingSlash(url: string): string {
   return url.length > 1 && url.endsWith('/') ? url.slice(0, -1) : url;
+}
+
+function escapeMarkdownLinkTitle(title: string): string {
+  return title.replace(/[\[\]]/g, '\\$&').replace(/\n/g, ' ');
+}
+
+function escapeMarkdownLinkUrl(url: string): string {
+  return url.replace(/\)/g, '%29');
+}
+
+function sanitizeInlineText(text: string): string {
+  return text.replace(/\n/g, ' ');
+}
+
+/**
+ * Estimate token count using the ~4 chars per token heuristic.
+ * This is a rough approximation suitable for context window budgeting.
+ */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
 }

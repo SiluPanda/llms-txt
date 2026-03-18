@@ -1,4 +1,4 @@
-import { generateLlmsTxt, generateLlmsFullTxt } from '../../src/core/generator.js';
+import { generateLlmsTxt, generateLlmsFullTxt, generateLlmsSmallTxt, estimateTokens } from '../../src/core/generator.js';
 import type { LlmsTxtConfig, PageInfo } from '../../src/types.js';
 
 function makeConfig(overrides?: Partial<LlmsTxtConfig>): LlmsTxtConfig {
@@ -265,6 +265,39 @@ describe('generateLlmsTxt', () => {
     const result = generateLlmsTxt(config, pages);
     expect(result.endsWith('\n')).toBe(true);
   });
+
+  it('escapes brackets in page titles to prevent broken markdown links', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/api', title: '[Deprecated] Old API', description: 'Removed in v2' }),
+    ];
+    const result = generateLlmsTxt(config, pages);
+
+    expect(result).toContain('\\[Deprecated\\] Old API');
+    expect(result).toContain('(https://acme.com/api)');
+  });
+
+  it('escapes parentheses in URLs', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: 'https://example.com/wiki/Page_(disambiguation)', title: 'Wiki Page' }),
+    ];
+    const result = generateLlmsTxt(config, pages);
+
+    expect(result).toContain('(https://example.com/wiki/Page_(disambiguation%29)');
+  });
+
+  it('sanitizes newlines in titles and descriptions', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/multi', title: 'Multi\nLine Title', description: 'Desc\nwith newline' }),
+    ];
+    const result = generateLlmsTxt(config, pages);
+
+    expect(result).not.toContain('\nLine Title');
+    expect(result).toContain('Multi Line Title');
+    expect(result).toContain(': Desc with newline');
+  });
 });
 
 describe('generateLlmsFullTxt', () => {
@@ -360,5 +393,157 @@ describe('generateLlmsFullTxt', () => {
     const pages = [makePage()];
     const result = generateLlmsFullTxt(config, pages);
     expect(result.endsWith('\n')).toBe(true);
+  });
+});
+
+describe('generateLlmsSmallTxt', () => {
+  it('includes site name as H1 heading', () => {
+    const config = makeConfig();
+    const pages = [makePage({ path: '/about', title: 'About' })];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('# Acme Corp');
+  });
+
+  it('does not include blockquote description', () => {
+    const config = makeConfig();
+    const pages = [makePage({ path: '/about', title: 'About' })];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).not.toContain('> Acme Corp builds innovative solutions.');
+  });
+
+  it('does not include preamble', () => {
+    const config = makeConfig({
+      options: { preamble: 'This is preamble text.' },
+    });
+    const pages = [makePage()];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).not.toContain('This is preamble text.');
+  });
+
+  it('includes titles and URLs but no descriptions', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/about', title: 'About', description: 'About us' }),
+      makePage({ path: '/contact', title: 'Contact', description: 'Get in touch' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('- [About](https://acme.com/about)');
+    expect(result).toContain('- [Contact](https://acme.com/contact)');
+    // Descriptions should NOT appear
+    expect(result).not.toContain('About us');
+    expect(result).not.toContain('Get in touch');
+  });
+
+  it('organizes pages into sections', () => {
+    const config = makeConfig({
+      sections: [
+        { name: 'Docs', pathPrefix: '/docs' },
+        { name: 'Main', pathPrefix: '/' },
+      ],
+    });
+    const pages = [
+      makePage({ path: '/', title: 'Home' }),
+      makePage({ path: '/docs/intro', title: 'Intro' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('## Docs');
+    expect(result).toContain('## Main');
+  });
+
+  it('applies filterPages option', () => {
+    const config = makeConfig({
+      options: {
+        filterPages: (page) => page.path !== '/hidden',
+      },
+    });
+    const pages = [
+      makePage({ path: '/visible', title: 'Visible' }),
+      makePage({ path: '/hidden', title: 'Hidden' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('[Visible]');
+    expect(result).not.toContain('Hidden');
+  });
+
+  it('creates single "Pages" section when no sections defined', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/a', title: 'Page A' }),
+      makePage({ path: '/b', title: 'Page B' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('## Pages');
+  });
+
+  it('does not include additionalSections', () => {
+    const config = makeConfig({
+      options: {
+        additionalSections: { 'API': 'See api docs.' },
+      },
+    });
+    const pages = [makePage()];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).not.toContain('## API');
+    expect(result).not.toContain('See api docs.');
+  });
+
+  it('ends output with a newline', () => {
+    const config = makeConfig();
+    const pages = [makePage()];
+    const result = generateLlmsSmallTxt(config, pages);
+    expect(result.endsWith('\n')).toBe(true);
+  });
+
+  it('escapes brackets in page titles', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/api', title: '[Beta] API', description: 'The API' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('\\[Beta\\] API');
+  });
+
+  it('resolves relative paths to full URLs', () => {
+    const config = makeConfig();
+    const pages = [
+      makePage({ path: '/docs/guide', title: 'Guide' }),
+    ];
+    const result = generateLlmsSmallTxt(config, pages);
+
+    expect(result).toContain('https://acme.com/docs/guide');
+  });
+});
+
+describe('estimateTokens', () => {
+  it('estimates tokens as ceil(length / 4)', () => {
+    expect(estimateTokens('abcd')).toBe(1);
+    expect(estimateTokens('abcde')).toBe(2);
+    expect(estimateTokens('ab')).toBe(1);
+    expect(estimateTokens('abcdefgh')).toBe(2);
+  });
+
+  it('returns 0 for empty string', () => {
+    expect(estimateTokens('')).toBe(0);
+  });
+
+  it('handles long text correctly', () => {
+    const text = 'a'.repeat(1000);
+    expect(estimateTokens(text)).toBe(250);
+  });
+
+  it('rounds up for non-divisible lengths', () => {
+    // 7 / 4 = 1.75 → ceil → 2
+    expect(estimateTokens('abcdefg')).toBe(2);
+    // 9 / 4 = 2.25 → ceil → 3
+    expect(estimateTokens('abcdefghi')).toBe(3);
   });
 });

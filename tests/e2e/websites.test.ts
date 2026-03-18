@@ -158,7 +158,7 @@ describe('e2e: cloudflare.com', () => {
         expect(page.title).toBeTruthy();
       }
     },
-    45_000,
+    90_000,
   );
 
   it(
@@ -235,7 +235,7 @@ describe('e2e: stripe.com', () => {
       );
       expect(withStructuredData.length).toBeGreaterThanOrEqual(1);
     },
-    45_000,
+    90_000,
   );
 
   it(

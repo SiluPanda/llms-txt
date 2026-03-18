@@ -1,5 +1,8 @@
 {
-  "name": "llms-txt",
+  "name": "@silupanda/llms-txt",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.1.0",
   "description": "Auto-generate and serve llms.txt for AI agent discoverability",
   "type": "module",
@@ -61,6 +64,7 @@
   "bin": {
     "llms-txt": "./dist/cli.js"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "LICENSE",

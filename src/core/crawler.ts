@@ -1,7 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { DiscoverOptions, PageInfo } from '../types.js';
-import { extractPageInfo } from './extractor.js';
+import { extractPageInfo, type ExtractOptions } from './extractor.js';
+import { matchesGlob } from './glob.js';
 
 const DEFAULT_MAX_DEPTH = 3;
 const MAX_CONCURRENCY = 5;
@@ -9,6 +10,7 @@ const MAX_CONCURRENCY = 5;
 export async function discoverPages(
   options: DiscoverOptions,
   siteUrl: string,
+  extractOptions?: ExtractOptions,
 ): Promise<PageInfo[]> {
   const results: PageInfo[] = [];
 
@@ -17,17 +19,18 @@ export async function discoverPages(
       options.dir,
       options.include,
       options.exclude,
+      extractOptions,
     );
     results.push(...dirPages);
   }
 
   if (options.sitemapUrl) {
-    const sitemapPages = await discoverFromSitemap(options.sitemapUrl);
+    const sitemapPages = await discoverFromSitemap(options.sitemapUrl, extractOptions);
     results.push(...sitemapPages);
   }
 
   if (options.crawlUrl) {
-    const crawledPages = await crawlUrl(options.crawlUrl, options.maxDepth);
+    const crawledPages = await crawlUrl(options.crawlUrl, options.maxDepth, extractOptions);
     results.push(...crawledPages);
   }
 
@@ -49,6 +52,7 @@ export async function discoverFromDirectory(
   dir: string,
   include?: string[],
   exclude?: string[],
+  extractOptions?: ExtractOptions,
 ): Promise<PageInfo[]> {
   const patterns = include ?? ['**/*.html'];
   const htmlFiles = await walkDirectory(dir, dir, patterns, exclude ?? []);
@@ -59,7 +63,7 @@ export async function discoverFromDirectory(
       const html = await readFile(filePath, 'utf-8');
       const relativePath = path.relative(dir, filePath);
       const urlPath = filePathToUrlPath(relativePath);
-      const info = extractPageInfo(html, urlPath);
+      const info = extractPageInfo(html, urlPath, extractOptions);
       pages.push(info);
     } catch (err) {
       console.warn(`Failed to process ${filePath}:`, err);
@@ -69,7 +73,7 @@ export async function discoverFromDirectory(
   return pages;
 }
 
-export async function discoverFromSitemap(sitemapUrl: string): Promise<PageInfo[]> {
+export async function discoverFromSitemap(sitemapUrl: string, extractOptions?: ExtractOptions): Promise<PageInfo[]> {
   try {
     const response = await fetch(sitemapUrl);
     if (!response.ok) {
@@ -85,7 +89,7 @@ export async function discoverFromSitemap(sitemapUrl: string): Promise<PageInfo[
         const res = await fetch(url);
         if (!res.ok) return null;
         const html = await res.text();
-        return extractPageInfo(html, url);
+        return extractPageInfo(html, url, extractOptions);
       } catch (err) {
         console.warn(`Failed to fetch ${url}:`, err);
         return null;
@@ -97,7 +101,7 @@ export async function discoverFromSitemap(sitemapUrl: string): Promise<PageInfo[
   }
 }
 
-export async function crawlUrl(url: string, maxDepth?: number): Promise<PageInfo[]> {
+export async function crawlUrl(url: string, maxDepth?: number, extractOptions?: ExtractOptions): Promise<PageInfo[]> {
   const depth = maxDepth ?? DEFAULT_MAX_DEPTH;
   const visited = new Set<string>();
   const pages: PageInfo[] = [];
@@ -121,7 +125,7 @@ export async function crawlUrl(url: string, maxDepth?: number): Promise<PageInfo
           if (!contentType.includes('text/html')) return null;
 
           const html = await res.text();
-          const info = extractPageInfo(html, item.url);
+          const info = extractPageInfo(html, item.url, extractOptions);
           pages.push(info);
 
           if (item.depth < depth) {
@@ -182,45 +186,6 @@ async function walkDirectory(
   return results;
 }
 
-function matchesGlob(filePath: string, patterns: string[]): boolean {
-  if (patterns.length === 0) return false;
-  const normalized = filePath.replace(/\\/g, '/');
-  return patterns.some((pattern) => globToRegex(pattern).test(normalized));
-}
-
-function globToRegex(glob: string): RegExp {
-  let regex = '';
-  let i = 0;
-
-  while (i < glob.length) {
-    const char = glob[i];
-
-    if (char === '*' && glob[i + 1] === '*') {
-      if (glob[i + 2] === '/') {
-        regex += '(?:.+/)?';
-        i += 3;
-      } else {
-        regex += '.*';
-        i += 2;
-      }
-    } else if (char === '*') {
-      regex += '[^/]*';
-      i++;
-    } else if (char === '?') {
-      regex += '[^/]';
-      i++;
-    } else if (char === '.') {
-      regex += '\\.';
-      i++;
-    } else {
-      regex += char;
-      i++;
-    }
-  }
-
-  return new RegExp(`^${regex}$`);
-}
-
 function filePathToUrlPath(relativePath: string): string {
   const normalized = relativePath.replace(/\\/g, '/');
   let urlPath = '/' + normalized;
@@ -236,7 +201,8 @@ function filePathToUrlPath(relativePath: string): string {
 
 function extractUrlsFromSitemap(xml: string): string[] {
   const urls: string[] = [];
-  const locRegex = /<loc>\s*(.*?)\s*<\/loc>/gi;
+  // Support optional XML namespace prefix (e.g., <sitemap:loc> or <loc>)
+  const locRegex = /<(?:\w+:)?loc>\s*(.*?)\s*<\/(?:\w+:)?loc>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = locRegex.exec(xml)) !== null) {

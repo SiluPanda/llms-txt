@@ -75,6 +75,8 @@ export interface DiscoverOptions {
 export interface GenerateOptions {
   /** Generate llms-full.txt with full page content (default: true). */
   full?: boolean;
+  /** Generate llms-small.txt with just titles and URLs (default: true). */
+  small?: boolean;
   /** Custom markdown to insert after the site description. */
   preamble?: string;
   /** Additional sections appended to the output. Key = heading, value = markdown. */
@@ -83,6 +85,10 @@ export interface GenerateOptions {
   cacheTtl?: number;
   /** Custom filter applied to discovered pages. Return false to exclude. */
   filterPages?: (page: PageInfo) => boolean;
+  /** Max content length per page in characters (truncates with ellipsis). */
+  maxContentLength?: number;
+  /** Extra CSS selectors for noise elements to strip during extraction (e.g. '.cookie-banner', '#ads'). */
+  noiseSelectors?: string[];
 }
 
 // ── Main config ─────────────────────────────────────────────
@@ -116,10 +122,30 @@ export interface LlmsTxtOutput {
   llmsTxt: string;
   /** Content of llms-full.txt (omitted when options.full is false). */
   llmsFullTxt?: string;
+  /** Content of llms-small.txt (omitted when options.small is false). */
+  llmsSmallTxt?: string;
   /** Pages that were included. */
   pages: PageInfo[];
   /** Generation timestamp. */
   generatedAt: Date;
+  /** Approximate token counts for each output file. */
+  tokenCounts?: {
+    llmsTxt: number;
+    llmsFullTxt?: number;
+    llmsSmallTxt?: number;
+  };
+}
+
+// ── Validation types ────────────────────────────────────────
+
+/** A single validation issue found in an llms.txt file. */
+export interface ValidationIssue {
+  /** Severity: 'error' for spec violations, 'warning' for quality issues. */
+  level: 'error' | 'warning';
+  /** Human-readable description of the issue. */
+  message: string;
+  /** Line number where the issue was found (1-based), if applicable. */
+  line?: number;
 }
 
 // ── Cache types ─────────────────────────────────────────────

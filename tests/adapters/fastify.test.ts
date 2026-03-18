@@ -43,6 +43,16 @@ function createMockFastify() {
     get(path: string, handler: Function) {
       routes[path] = handler;
     },
+    register(plugin: Function) {
+      // Simulate Fastify's encapsulated register by calling the plugin
+      // with a mock scope that captures routes
+      const scope = {
+        get(path: string, handler: Function) {
+          routes[path] = handler;
+        },
+      };
+      plugin(scope);
+    },
   };
 }
 

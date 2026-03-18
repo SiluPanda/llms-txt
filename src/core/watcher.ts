@@ -1,4 +1,5 @@
 import { watch as fsWatch, type FSWatcher } from 'node:fs';
+import { matchesGlob } from './glob.js';
 
 export interface WatcherOptions {
   dir: string;
@@ -29,8 +30,8 @@ export function watch(options: WatcherOptions): Watcher {
 
     const normalized = filename.replace(/\\/g, '/');
 
-    if (!matchesPatterns(normalized, include)) return;
-    if (exclude.length > 0 && matchesPatterns(normalized, exclude)) return;
+    if (!matchesGlob(normalized, include)) return;
+    if (exclude.length > 0 && matchesGlob(normalized, exclude)) return;
 
     if (timer) clearTimeout(timer);
 
@@ -60,41 +61,3 @@ export function watch(options: WatcherOptions): Watcher {
   };
 }
 
-function matchesPatterns(filePath: string, patterns: string[]): boolean {
-  if (patterns.length === 0) return false;
-  const normalized = filePath.replace(/\\/g, '/');
-  return patterns.some((pattern) => globToRegex(pattern).test(normalized));
-}
-
-function globToRegex(glob: string): RegExp {
-  let regex = '';
-  let i = 0;
-
-  while (i < glob.length) {
-    const char = glob[i];
-
-    if (char === '*' && glob[i + 1] === '*') {
-      if (glob[i + 2] === '/') {
-        regex += '(?:.+/)?';
-        i += 3;
-      } else {
-        regex += '.*';
-        i += 2;
-      }
-    } else if (char === '*') {
-      regex += '[^/]*';
-      i++;
-    } else if (char === '?') {
-      regex += '[^/]';
-      i++;
-    } else if (char === '.') {
-      regex += '\\.';
-      i++;
-    } else {
-      regex += char;
-      i++;
-    }
-  }
-
-  return new RegExp(`^${regex}$`);
-}

@@ -1,7 +1,12 @@
 import * as cheerio from 'cheerio';
 import type { PageInfo } from '../types.js';
 
-export function extractPageInfo(html: string, url: string): PageInfo {
+export interface ExtractOptions {
+  /** Extra CSS selectors for noise elements to remove (e.g. '.cookie-banner', '#ads'). */
+  noiseSelectors?: string[];
+}
+
+export function extractPageInfo(html: string, url: string, options?: ExtractOptions): PageInfo {
   try {
     const $ = cheerio.load(html);
 
@@ -15,7 +20,7 @@ export function extractPageInfo(html: string, url: string): PageInfo {
       if (text) headings.push(text);
     });
 
-    const content = extractMainContent($);
+    const content = extractMainContent($, options?.noiseSelectors);
 
     const structuredData = extractJsonLd($);
 
@@ -41,7 +46,7 @@ export function extractPageInfo(html: string, url: string): PageInfo {
   }
 }
 
-function extractMainContent($: cheerio.CheerioAPI): string {
+function extractMainContent($: cheerio.CheerioAPI, noiseSelectors?: string[]): string {
   const clone = cheerio.load($.html() || '');
 
   let container = clone('main');
@@ -49,7 +54,17 @@ function extractMainContent($: cheerio.CheerioAPI): string {
   if (container.length === 0) container = clone('body');
   if (container.length === 0) return '';
 
+  // Remove standard noise elements
   container.find('script, style, nav, header, footer, aside').remove();
+
+  // Remove common noise patterns (cookie banners, ads, etc.)
+  container.find('[class*="cookie"], [class*="banner"], [class*="popup"], [id*="cookie"], [id*="banner"]').remove();
+  container.find('[role="banner"], [role="navigation"], [role="contentinfo"]').remove();
+
+  // Remove user-specified noise selectors
+  if (noiseSelectors?.length) {
+    container.find(noiseSelectors.join(', ')).remove();
+  }
 
   const text = container.text();
   return text.replace(/\s+/g, ' ').trim();

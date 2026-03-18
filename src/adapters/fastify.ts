@@ -25,6 +25,31 @@ export function llmsTxtPlugin(
       reply.status(result.status).headers(result.headers).send(result.body);
     });
 
+    fastify.get('/llms-small.txt', async (_request: any, reply: any) => {
+      const result = await handleRequest('/llms-small.txt', config);
+      if (!result) {
+        reply.status(404).send('Not Found');
+        return;
+      }
+      reply.status(result.status).headers(result.headers).send(result.body);
+    });
+
+    // Handle per-page .md endpoints via preHandler hook on a catch-all route.
+    // We use a separate encapsulated context to avoid clobbering the user's routes.
+    fastify.register(async (scope: any) => {
+      scope.get('/*', async (request: any, reply: any) => {
+        const url = request.url as string;
+        if (url.endsWith('.md') && url !== '/.md') {
+          const result = await handleRequest(url, config);
+          if (result) {
+            reply.status(result.status).headers(result.headers).send(result.body);
+            return;
+          }
+        }
+        reply.status(404).send('Not Found');
+      });
+    });
+
     done();
   };
 }
